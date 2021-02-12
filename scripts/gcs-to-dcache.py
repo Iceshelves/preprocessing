@@ -1,5 +1,5 @@
 """
-Download tiles from 
+Download tiles from GCS bucket to SURF dCache storage
 
 """
 
@@ -40,6 +40,11 @@ class Downloader:
     Provide functionality to download a file from GCS to dCache
     """
     def __init__(self, gcs_token_file, dcache_token_file):
+        """
+        :param gcs_token_file: file with GCS credentials
+        :param dcache_token_file: file with dCache token (rclone config file
+            or plain text file)
+        """
 
         # read authentication credentials created by `gcloud`
         self.gcs_fs = gcsfs.GCSFileSystem(token=gcs_token_file)
