@@ -14,6 +14,9 @@ is the prototype and contains more description and documentation of each steps).
 * The following notebooks have been used to test different approaches for generating cutouts from the tiles:
     * [`window_loading_rolling.ipynb`](./window_loading_rolling.ipynb) shows how to achieve this with the `xarray`'s 
     `rolling` method.
+    * [`window_loading_list.ipynb`](./window_loading_list.ipynb) shows how to achieve this with creating a list of `rasterio`'s `Window` objects.
+
+* [`data_manipulation_sentinel1-2_example.ipynb`](./data_manipulation_sentinel1-2_example.ipynb) shows how to manipulate S1 data and/with S2 data with `rioxarray`.
     
  
      
