@@ -179,7 +179,7 @@ config = {'catalogPath':"./S2_composite_catalog",
 		  'sizeStep':5}
 	
 
-catPath, labPath, outputDir, sizeTestSet, valSplitFrac, roiFile, _, sizeCutOut, nEpochmax, sizeStep
+catPath, labPath, outputDir, sizeTestSet, valSplitFrac, roiFile, _, sizeCutOut, nEpochmax, sizeStep = read_config(config)
 
 
 
