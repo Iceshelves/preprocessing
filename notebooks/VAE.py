@@ -93,7 +93,7 @@ def make_decoder():
 
 
 # Define VAE model.
-def make_vae(encoder_inputs, z, decoder):
+def make_vae(encoder_inputs, z, z_mean, z_log_var, decoder):
     outputs = decoder(z)
     vae = tf.keras.Model(inputs=encoder_inputs, outputs=outputs, name="vae")
 

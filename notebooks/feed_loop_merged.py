@@ -17,6 +17,7 @@ import VAE
 import datetime
 import geopandas as gpd
 import pystac
+import os
 from stac2webdav.utils import catalog2geopandas
 
 
@@ -29,7 +30,7 @@ Read label geojson files to produce labeled test data.
 """
 
 def read_config(config):
-    if pathlib.Path(config).is_file():
+    if not isinstance(config, dict):
         raise NotImplementedError()
         
     else :
@@ -39,12 +40,14 @@ def read_config(config):
         sizeTestSet = config['sizeTestSet']
         valSplitFrac = config['validationSplitFraction']
         roiFile = config['ROIFile']
-        bands = config['bands']
+        bands = list(config['bands'].split(" ")) 
+        bands = [int(i) for i in bands]
         sizeCutOut = config['sizeCutOut']
         nEpochMax = config['nEpochMax']
         sizeStep = config['sizeStep']
+        norm_threshold = config['normalizationThreshold']
         
-    return catPath, labPath, outputDir, sizeTestSet, valSplitFrac, roiFile, bands, sizeCutOut, nEpochmax, sizeStep
+    return catPath, labPath, outputDir, sizeTestSet, valSplitFrac, roiFile, bands, sizeCutOut, nEpochMax, sizeStep, norm_threshold
 
 
 def read_tile_catalog(catalog_path):
@@ -71,14 +74,13 @@ def get_asset_paths(catalog, item_ids, asset_key):
     return [asset.get_absolute_href() for asset in assets]
 
 
-
 """
 defintition of Dataset object providing data for ingestion to VAE
 """
 
 class Dataset:
     
-    def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None, num_tiles=None, shuffle_tiles=False):
+    def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None, num_tiles=None, shuffle_tiles=False, norm_threshold=None):
         self.cutout_size = cutout_size
         self.bands = bands
         self.stride = stride if stride is not None else self.cutout_size
@@ -95,6 +97,7 @@ class Dataset:
         self.buffer = None
         self.invert = None
         self.all_touched = None
+        self.norm_threshold = norm_threshold
     
     def set_mask(self, geometry, crs, buffer=None, invert=False, all_touched=False):
         """ Mask a selection of the pixels using a geometry."""
@@ -111,7 +114,7 @@ class Dataset:
             output_shapes=(
                 None,  # x
                 None,  # y
-                (None, None, self.cutout_size, self.cutout_size)  # samples, bands, x_win, y_win
+                (None,  self.cutout_size, self.cutout_size, None)  # samples, x_win, y_win, bands
             )
         )
         return ds.flat_map(lambda x,y,z: tf.data.Dataset.from_tensor_slices((x,y,z)))
@@ -123,7 +126,7 @@ class Dataset:
         """
         for tile in self.tiles:
             
-            print(f"Reading tile {tile}!")
+            #print(f"Reading tile {tile}!")
             
             # read tile
             da = rioxr.open_rasterio(tile).astype("float32")  # needed to mask with NaN's
@@ -154,6 +157,12 @@ class Dataset:
             # drop NaN-containing windows
             da = da.stack(sample=('x', 'y'))
             da = da.dropna(dim='sample', how='any')
+            
+            # normalize
+            if self.norm_threshold is not None:
+                da = (da + 0.1) / (self.norm_threshold + 1)
+                da = da.clip(max=1)
+            
             yield (da.sample.coords['x'], 
                    da.sample.coords['y'], 
                    da.data.transpose(3, 1, 2, 0))  # samples, x_win, y_win, bands
@@ -167,19 +176,19 @@ Begin data ingestion and initial processing
 """
 1. Input config
 """
-config = {'catalogPath':"./S2_composite_catalog",
-		  'labelsPath':"./labels",
-		  'outpuDir':'~/output',
+config = {'catalogPath':"/projects/0/einf512/S2_composite_catalog",
+		  'labelsPath':"/projects/0/einf512/labels",
+		  'outputDirectory':'.',
 		  'sizeTestSet':12,
-		  'valSplitFrac':0.3,
-		  'roiFile':"./ne_10m_antarctic_ice_shelves_polys/ne_10m_antarctic_ice_shelves_polys.shp",
-		  'bands':[1,2,3],
+		  'validationSplitFraction':0.3,
+		  'ROIFile':"/projects/0/einf512/ne_10m_antarctic_ice_shelves_polys/ne_10m_antarctic_ice_shelves_polys.shp",
+		  'bands':"1 2 3",
 		  'sizeCutOut':20,
 		  'nEpochMax':2,
-		  'sizeStep':5}
-	
+		  'sizeStep':5,
+		  'normalizationThreshold':20000}
 
-catPath, labPath, outputDir, sizeTestSet, valSplitFrac, roiFile, _, sizeCutOut, nEpochmax, sizeStep = read_config(config)
+catPath, labPath, outputDir, sizeTestSet, valSplitFrac, roiFile, bands, sizeCutOut, nEpochmax, sizeStep, norm_threshold = read_config(config)
 
 
 
@@ -258,11 +267,11 @@ t.b.h. as it is a preselection step across all data
 """
 
 # no balancing in the test set (i.e. don't apply mask)
-test_set = Dataset(test_set_paths, sizeCutOut, bands, shuffle_tiles=True)
+test_set = Dataset(test_set_paths, sizeCutOut, bands, shuffle_tiles=True, norm_threshold = norm_threshold )
 test_set_tf = test_set.to_tf()
 
 # balanced validation set (i.e. apply mask)
-val_set = Dataset(val_set_paths, sizeCutOut, bands, shuffle_tiles=True)
+val_set = Dataset(val_set_paths, sizeCutOut, bands, shuffle_tiles=True, norm_threshold = norm_threshold)
 val_set.set_mask(mask.unary_union, crs=mask.crs)
 val_set_tf = val_set.to_tf()
 
@@ -279,7 +288,7 @@ test_set_tf = test_set_tf.batch(64, drop_remainder=True)
 5. Loop and feed to VAE
 """
 
-epochCounter = 1 # start at 0 or adjust offset calculation
+epochcounter = 1 # start at 0 or adjust offset calculation
 
 # using datetime module for naming the current model, so that old models do not get overwritten
 import datetime;   
@@ -292,46 +301,40 @@ ts = ct.timestamp()
 
 encoder_inputs, encoder, z , z_mean, z_log_var = VAE.make_encoder()
 decoder  = VAE.make_decoder()
-vae = VAE.make_vae(encoder_inputs, z, decoder)
+vae = VAE.make_vae(encoder_inputs, z, z_mean, z_log_var, decoder)
 vae.compile(optimizer=keras.optimizers.Adam())
-path = os.path.join(outputDir, '/model_' + str(int(ts))) 
-vae.save(os.path.join(path ,'_epoch_' + str(epochCounter -1) ))
+path = outputDir + '/model_' + str(int(ts))
+
+vae.save(os.path.join(path ,'_epoch_' + str(epochcounter -1) ))
 
 """
 begin loop
 """
 
-while epochcounter < nEpochsMax:
+while epochcounter < nEpochmax:
     offset = (epochcounter -1)*sizeStep
  
-    train_set = Dataset(train_set_paths, sizeCutOut, offset=offset,
-                        shuffle_tiles=True)
+    train_set = Dataset(train_set_paths, sizeCutOut, offset=offset, bands = bands,
+                        shuffle_tiles=True, norm_threshold = norm_threshold)
     train_set.set_mask(mask.unary_union, crs=mask.crs)
     train_set_tf = train_set.to_tf()
+    
 
     """
     this buffersize sould correpond to 6 full tiles, 
     so 7 in total in memory
     """ 
-    train_set_tf = train_set_tf.shuffle(buffersize=3000000).batch(64, drop_remainder=True)
+    train_set_tf = train_set_tf.shuffle(buffer_size=3000000).batch(64, drop_remainder=True)
     #inData = Dataset(inputList,sizeCutOut,offset=offset,shuffle_tiles=True)
     #inData.set_mask(gdf.unary_union, crs=gdf.crs)
     #dataSet = inData.to_tf()
-
-    """
-    have to rethink normalization
-    """
-    #normalization
-    #data = dataSet # should be split in train and test
-    #imax = np.max(data) # 15.000-ish
-    #data = (data+0.1)/ (imax+1)
-
     
-    vae =  keras.models.load_model(path + '_epoch_' + str(epochCounter -1))# change it: make a call to os to create a path
+   
+    
+    vae =  keras.models.load_model(os.path.join(path ,'_epoch_' + str(epochcounter -1) ))
     
     vae.fit(train_set_tf, epochs=1, validation_data = val_set_tf)
-    vae.save(os.path.join(path,'_epoch_' + str(epochCounter))   # change it: make a call to os to create a path
-         
-             
+    vae.save(os.path.join(path,'_epoch_' + str(epochcounter)))   # change it: make a call to os to create a path
+                      
     #repeat from here        
     epochcounter = epochcounter + 1
