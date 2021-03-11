@@ -79,8 +79,10 @@ defintition of Dataset object providing data for ingestion to VAE
 """
 
 class Dataset:
-    
-    def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None, num_tiles=None, shuffle_tiles=False, norm_threshold=None):
+
+    def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None,
+                 num_tiles=None, shuffle_tiles=False, norm_threshold=None,
+                 return_coordinates=False):
         self.cutout_size = cutout_size
         self.bands = bands
         self.stride = stride if stride is not None else self.cutout_size
@@ -98,7 +100,8 @@ class Dataset:
         self.invert = None
         self.all_touched = None
         self.norm_threshold = norm_threshold
-    
+        self.return_coordinates = return_coordinates
+
     def set_mask(self, geometry, crs, buffer=None, invert=False, all_touched=False):
         """ Mask a selection of the pixels using a geometry."""
         self.mask = gpd.GeoSeries({"geometry": geometry}, crs=crs)
@@ -117,7 +120,9 @@ class Dataset:
                 (None,  self.cutout_size, self.cutout_size, None)  # samples, x_win, y_win, bands
             )
         )
-        return ds.flat_map(lambda x,y,z: tf.data.Dataset.from_tensor_slices((x,y,z)))
+        if not self.return_coordinates:
+            ds = ds.map(lambda x, y, cutout: cutout)  # only return cutout
+        return ds.flat_map(lambda *x: tf.data.Dataset.from_tensor_slices(x))
 
     def _generate_cutouts(self):
         """ 
