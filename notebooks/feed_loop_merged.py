@@ -122,7 +122,10 @@ class Dataset:
         )
         if not self.return_coordinates:
             ds = ds.map(lambda x, y, cutout: cutout)  # only return cutout
-        return ds.flat_map(lambda *x: tf.data.Dataset.from_tensor_slices(x))
+        # remove the outer dimension of the array if not return_coordinates
+        return ds.flat_map(
+            lambda *x: tf.data.Dataset.from_tensor_slices(x if len(x) > 1 else x[0])
+        )
 
     def _generate_cutouts(self):
         """ 
