@@ -19,6 +19,7 @@ import geopandas as gpd
 import pystac
 import os
 from stac2webdav.utils import catalog2geopandas
+import gc
 
 
 """
@@ -133,8 +134,7 @@ class Dataset:
         cutouts for each of them.
         """
         for tile in self.tiles:
-            
-            #print(f"Reading tile {tile}!")
+            gc.collect()  # solves memory leak when dataset is used within Keras fit
             
             # read tile
             da = rioxr.open_rasterio(tile).astype("float32")  # needed to mask with NaN's
