@@ -6,13 +6,14 @@ import pystac
 
 
 def _read_tile_catalog(catalog_path):
-    """ Read the tile catalog as a GeoDataframe """
+    """ Read the tile catalog """
     catalog_path = pathlib.Path(catalog_path)
     catalog_path = catalog_path / "catalog.json"
     return pystac.Catalog.from_file(catalog_path.as_posix())
 
 
 def _catalog_to_geodataframe(catalog, crs="WGS84"):
+    """ Convert STAC catalog to a GeoDataFrame object """
     features = {item.id: item.to_dict() for item in catalog.get_all_items()}
     gdf = gpd.GeoDataFrame.from_features(features.values())
     gdf.index = features.keys()
@@ -48,6 +49,7 @@ def _get_tile_paths(catalog, item_ids, asset_key):
 
 
 def _filter_labels(labels, start_datetime, end_datetime, verbose=True):
+    """ Select the labels whose date in the provided datetime range """
     mask = (labels.Date >= start_datetime) & (labels.Date <= end_datetime)
     if verbose:
         print("Selecting {} out of {} labels".format(mask.sum(), len(labels)))
@@ -58,14 +60,16 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
                          validation_set_size=None, random_state=None,
                          verbose=True):
     """
+    The tiles in the provided STAC catalog are split in test, validation and
+    training sets.
 
-    :param catalog_path:
-    :param test_set_size:
-    :param labels_path:
-    :param validation_set_size:
-    :param random_state:
-    :param verbose:
-    :return:
+    :param catalog_path: STAC catalog path
+    :param test_set_size: size of the test set
+    :param labels_path: path to the labels. If provided, all tiles overlapping
+        with the labels will be included in the test set
+    :param validation_set_size: size of the validation set
+    :param random_state: random state for the data set sampling
+    :param verbose: if True, print info to stdout
     """
 
     # read tile catalog

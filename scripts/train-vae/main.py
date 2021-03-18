@@ -50,7 +50,7 @@ def main(config=None):
     ct = datetime.datetime.now()  # ct stores current time
     ts = ct.timestamp()  # ts store timestamp of current time
 
-    # use the icesheves extent as mask for the initial balancing
+    # use the ice-shelves extent as mask for the initial balancing
     mask = gpd.read_file(roiFile)
 
     # split tiles in training, validation and test sets
@@ -62,7 +62,7 @@ def main(config=None):
             labels_path=labPath,
             random_state=42  # random state ensures same data sets for each run
         )
-    # save dataset composition
+    # save dataset compositions
     path = outputDir + '/datasets_{}.json'.format(int(ts))
     with open(path, "w") as f:
         json.dump(fp=f, indent=4, obj=dict(training=train_set_paths,

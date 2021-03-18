@@ -7,10 +7,25 @@ import tensorflow as tf
 
 
 class Dataset:
-
+    """
+    Split tiles into square cutouts and return these as a tensorflow Dataset.
+    """
     def __init__(self, tile_list, cutout_size, bands, offset=0, stride=None,
                  num_tiles=None, shuffle_tiles=False, norm_threshold=None,
                  return_coordinates=False):
+        """
+        :param tile_list: list of tile paths
+        :param cutout_size: length of the cutout side (number of pixels)
+        :param bands: list of band indices to be considered
+        :param offset: lateral (X and Y) cutout offset (number of pixels)
+        :param stride: cutout stride (number of pixels)
+        :param num_tiles: only use a selection of the provided tile list
+        :param shuffle_tiles: if True, shuffle tiles
+        :param norm_threshold: normalize image intensities using the provided
+            threshold value
+        :param return_coordinates: if True, return the (X, Y) coordinates
+            together with the cutouts
+        """
         self.cutout_size = cutout_size
         self.bands = bands
         self.stride = stride if stride is not None else self.cutout_size
@@ -33,14 +48,23 @@ class Dataset:
 
     def set_mask(self, geometry, crs, buffer=None, invert=False,
                  all_touched=False):
-        """ Mask a selection of the pixels using a geometry."""
+        """
+        Clip the tiles with the provided geometry before generating the
+        cutouts.
+
+        :param geometry: geometry
+        :param crs: coordinate reference system (geopandas compatible)
+        :param buffer: apply provided buffer to the geometry
+        :param invert: clip the tiles with the inverted mask
+        :param all_touched: see `rioxarray.clip`
+        """
         self.mask = gpd.GeoSeries({"geometry": geometry}, crs=crs)
         self.buffer = buffer if buffer is not None else 0
         self.invert = invert
         self.all_touched = all_touched
 
     def to_tf(self):
-        """ Obtain dataset as a tensorflow `Dataset` object. """
+        """ Return dataset as a tensorflow `Dataset` object. """
         ds = tf.data.Dataset.from_generator(
             self._generate_cutouts,
             output_types=(tf.float64, tf.float64, tf.float32),
@@ -62,8 +86,8 @@ class Dataset:
 
     def _generate_cutouts(self):
         """
-        Iterate over (a selection of) the tiles yielding all
-        cutouts for each of them.
+        Iterate over (a selection of) the tiles yielding all cutouts for each
+        of them.
         """
         for tile in self.tiles:
             gc.collect()  # solves memory leak when dataset is used within fit

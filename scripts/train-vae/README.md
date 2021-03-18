@@ -1,3 +1,5 @@
+# Train VAE
+
 ~/outDir should exist beforehad (or create it in the feed_loop if it does not exist)
 train.slurm should be run from another dir (please change accordinlgly the path inside train.slurm), because it produces the slurm log files
 
