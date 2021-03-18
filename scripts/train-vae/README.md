@@ -3,5 +3,3 @@ train.slurm should be run from another dir (please change accordinlgly the path 
 
 the embedding code still to be added (based on the output of training models, the user decides which model to use for embedding,  so it is another script) . Or you can embed based on all models, that is a lot of plots
 
-the feed loop to merge needs to be now merged with Francesco's data splitting code
-
