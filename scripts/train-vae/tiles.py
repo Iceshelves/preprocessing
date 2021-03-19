@@ -33,11 +33,10 @@ def _read_labels(labels_path, verbose=True):
 
     crs = labels[0].crs
     assert all([label.crs == crs for label in labels])
-    labels = pd.concat(labels)  # .pipe(gpd.GeoDataFrame)
+    labels = pd.concat(labels)
 
     # fix datetimes' type
     labels.Date = pd.to_datetime(labels.Date)
-    # labels = labels.set_crs(crs)
     return labels
 
 
@@ -80,6 +79,7 @@ def split_train_and_test(catalog_path, test_set_size, labels_path=None,
     test_set = gpd.GeoDataFrame()
     if labels_path is not None:
         labels = _read_labels(labels_path, verbose)
+        labels = labels.to_crs(tiles.crs)  # make sure same CRS is used
 
         # select the only labels matching the tiles timespan
         labels = _filter_labels(labels,
